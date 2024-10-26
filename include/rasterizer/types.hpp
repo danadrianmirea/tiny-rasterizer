@@ -35,6 +35,16 @@ namespace rasterizer
 		}
 	};
 
+	inline vector4f operator * (float s, vector4f const & c)
+	{
+		return {s * c.x, s * c.y, s * c.z, s * c.w};
+	}
+
+	inline vector4f operator + (vector4f const & c0, vector4f const & c1)
+	{
+		return {c0.x + c1.x, c0.y + c1.y, c0.z + c1.z, c0.w + c1.w};
+	}
+
 	inline vector4f operator - (vector4f const & v0, vector4f const & v1)
 	{
 		return {v0.x - v1.x, v0.y - v1.y, v0.z - v1.z, v0.w - v1.w};

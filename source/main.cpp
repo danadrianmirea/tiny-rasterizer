@@ -81,13 +81,20 @@ int main()
 			{  0.f, 100.f, 0.f},
 		};
 
+		vector4f colors[] =
+		{
+			{1.f, 0.f, 0.f, 1.f},
+			{0.f, 1.f, 0.f, 1.f},
+			{0.f, 0.f, 1.f, 1.f},
+		};
+
 		for (int i = 0; i < 100; ++i)
 			draw(color_buffer,
 				draw_command{
 					.mesh = {
-						.positions = positions,
+						.positions = {positions},
+						.colors = {colors},
 						.vertex_count = 3,
-						.color = {(i % 3) == 0, (i % 3) == 1, (i % 3) == 2, 1.f},
 					},
 					.transform = {
 						1.f, 0.f, 0.f, mouse_x + 100.f * (i % 10),
