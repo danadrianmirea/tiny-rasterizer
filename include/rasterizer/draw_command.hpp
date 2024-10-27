@@ -1,6 +1,6 @@
 #pragma once
 
-#include <rasterizer/types.hpp>
+#include <rasterizer/matrix.hpp>
 #include <rasterizer/settings.hpp>
 #include <rasterizer/mesh.hpp>
 

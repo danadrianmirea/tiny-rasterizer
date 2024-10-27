@@ -1,6 +1,6 @@
 #pragma once
 
-#include <rasterizer/types.hpp>
+#include <rasterizer/vector.hpp>
 #include <rasterizer/attribute.hpp>
 
 namespace rasterizer
@@ -10,7 +10,8 @@ namespace rasterizer
 	{
 		attribute<vector3f> positions = {};
 		attribute<vector4f> colors = {};
-		std::uint32_t vertex_count = 0;
+		std::uint32_t const * indices = nullptr;
+		std::uint32_t count = 0;
 	};
 
 }
