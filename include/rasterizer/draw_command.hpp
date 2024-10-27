@@ -11,6 +11,7 @@ namespace rasterizer
 	{
 		struct mesh mesh;
 		enum cull_mode cull_mode = cull_mode::none;
+		depth_settings depth = {};
 		matrix4x4f transform = matrix4x4f::identity();
 	};
 

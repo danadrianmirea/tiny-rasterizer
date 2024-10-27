@@ -1,19 +1,23 @@
 #pragma once
 
-#include <rasterizer/color.hpp>
-
 #include <cstdint>
 
 namespace rasterizer
 {
 
+	template <typename Pixel>
 	struct image_view
 	{
-		color4ub * pixels = nullptr;
+		Pixel * pixels = nullptr;
 		std::uint32_t width = 0;
 		std::uint32_t height = 0;
 
-		color4ub & at(std::uint32_t x, std::uint32_t y) const
+		explicit operator bool() const
+		{
+			return pixels != nullptr;
+		}
+
+		Pixel & at(std::uint32_t x, std::uint32_t y) const
 		{
 			return pixels[x + y * width];
 		}

@@ -151,16 +151,41 @@ namespace rasterizer
 			return end;
 		}
 
+		bool depth_test_passed(depth_test_mode mode, std::uint32_t value, std::uint32_t reference)
+		{
+			switch (mode)
+			{
+			case depth_test_mode::always: return true;
+			case depth_test_mode::never: return false;
+			case depth_test_mode::less: return value < reference;
+			case depth_test_mode::less_equal: return value <= reference;
+			case depth_test_mode::greater: return value > reference;
+			case depth_test_mode::greater_equal: return value >= reference;
+			case depth_test_mode::equal: return value == reference;
+			case depth_test_mode::not_equal: return value != reference;
+			}
+
+			// Unreachable
+			return true;
+		}
+
 	}
 
-	void clear(image_view const & color_buffer, vector4f const & color)
+	void clear(image_view<color4ub> const & color_buffer, vector4f const & color)
 	{
 		auto ptr = color_buffer.pixels;
 		auto size = color_buffer.width * color_buffer.height;
 		std::fill(ptr, ptr + size, to_color4ub(color));
 	}
 
-	void draw(image_view const & color_buffer, viewport const & viewport, draw_command const & command)
+	void clear(image_view<std::uint32_t> const & depth_buffer, std::uint32_t value)
+	{
+		auto ptr = depth_buffer.pixels;
+		auto size = depth_buffer.width * depth_buffer.height;
+		std::fill(ptr, ptr + size, value);
+	}
+
+	void draw(framebuffer const & framebuffer, viewport const & viewport, draw_command const & command)
 	{
 		for (std::uint32_t vertex_index = 0; vertex_index + 2 < command.mesh.count; vertex_index += 3)
 		{
@@ -227,9 +252,9 @@ namespace rasterizer
 				}
 
 				std::int32_t xmin = std::max<std::int32_t>(viewport.xmin, 0);
-				std::int32_t xmax = std::min<std::int32_t>(viewport.xmax, color_buffer.width) - 1;
+				std::int32_t xmax = std::min<std::int32_t>(viewport.xmax, framebuffer.width()) - 1;
 				std::int32_t ymin = std::max<std::int32_t>(viewport.ymin, 0);
-				std::int32_t ymax = std::min<std::int32_t>(viewport.ymax, color_buffer.height) - 1;
+				std::int32_t ymax = std::min<std::int32_t>(viewport.ymax, framebuffer.height()) - 1;
 
 				xmin = std::max<float>(xmin, std::min({std::floor(v0.position.x), std::floor(v1.position.x), std::floor(v2.position.x)}));
 				xmax = std::min<float>(xmax, std::max({std::floor(v0.position.x), std::floor(v1.position.x), std::floor(v2.position.x)}));
@@ -258,7 +283,20 @@ namespace rasterizer
 							l1 /= lsum;
 							l2 /= lsum;
 
-							color_buffer.at(x, y) = to_color4ub(l0 * v0.color + l1 * v1.color + l2 * v2.color);
+							if (framebuffer.depth)
+							{
+								float z = l0 * v0.position.z + l1 * v1.position.z + l2 * v2.position.z;
+								std::uint32_t depth = (0.5f + 0.5f * z) * std::uint32_t(-1);
+
+								if (!depth_test_passed(command.depth.mode, depth, framebuffer.depth.at(x, y)))
+									continue;
+
+								if (command.depth.write)
+									framebuffer.depth.at(x, y) = depth;
+							}
+
+							if (framebuffer.color)
+								framebuffer.color.at(x, y) = to_color4ub(l0 * v0.color + l1 * v1.color + l2 * v2.color);
 						}
 					}
 				}
