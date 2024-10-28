@@ -12,6 +12,8 @@ namespace rasterizer
 		struct vertex
 		{
 			vector4f position;
+			vector3f world_position;
+			vector3f normal;
 			vector4f color;
 		};
 
@@ -27,6 +29,8 @@ namespace rasterizer
 
 			vertex v;
 			v.position = (1.f - t) * v0.position + t * v1.position;
+			v.world_position = (1.f - t) * v0.world_position + t * v1.world_position;
+			v.normal = (1.f - t) * v0.normal + t * v1.normal;
 			v.color = (1.f - t) * v0.color + t * v1.color;
 
 			return v;
@@ -187,28 +191,30 @@ namespace rasterizer
 
 	void draw(framebuffer const & framebuffer, viewport const & viewport, draw_command const & command)
 	{
+		auto view_projection = command.projection * command.view;
+
 		for (std::uint32_t vertex_index = 0; vertex_index + 2 < command.mesh.count; vertex_index += 3)
 		{
-			std::uint32_t i0 = vertex_index + 0;
-			std::uint32_t i1 = vertex_index + 1;
-			std::uint32_t i2 = vertex_index + 2;
+			std::uint32_t indices[3]
+			{
+				vertex_index + 0,
+				vertex_index + 1,
+				vertex_index + 2,
+			};
 
 			if (command.mesh.indices)
-			{
-				i0 = command.mesh.indices[i0];
-				i1 = command.mesh.indices[i1];
-				i2 = command.mesh.indices[i2];
-			}
+				for (int i = 0; i < 3; ++i)
+					indices[i] = command.mesh.indices[indices[i]];
 
 			vertex clipped_vertices[12];
 
-			clipped_vertices[0].position = command.transform * as_point(command.mesh.positions[i0]);
-			clipped_vertices[1].position = command.transform * as_point(command.mesh.positions[i1]);
-			clipped_vertices[2].position = command.transform * as_point(command.mesh.positions[i2]);
-
-			clipped_vertices[0].color = command.mesh.colors[i0];
-			clipped_vertices[1].color = command.mesh.colors[i1];
-			clipped_vertices[2].color = command.mesh.colors[i2];
+			for (int i = 0; i < 3; ++i)
+			{
+				clipped_vertices[i].world_position = to_vector3f(command.model * as_point(command.mesh.positions[indices[i]]));
+				clipped_vertices[i].position = view_projection * as_point(clipped_vertices[i].world_position);
+				clipped_vertices[i].normal = to_vector3f(command.model * as_vector(command.mesh.normals[indices[i]]));
+				clipped_vertices[i].color = command.mesh.colors[indices[i]];
+			}
 
 			auto clipped_vertices_end = clip_triangle(clipped_vertices, clipped_vertices + 3);
 
@@ -283,11 +289,12 @@ namespace rasterizer
 							l1 /= lsum;
 							l2 /= lsum;
 
+							auto ndc_position = l0 * v0.position + l1 * v1.position + l2 * v2.position;
+
+							std::uint32_t depth = (0.5f + 0.5f * ndc_position.z) * std::uint32_t(-1);
+
 							if (framebuffer.depth)
 							{
-								float z = l0 * v0.position.z + l1 * v1.position.z + l2 * v2.position.z;
-								std::uint32_t depth = (0.5f + 0.5f * z) * std::uint32_t(-1);
-
 								if (!depth_test_passed(command.depth.mode, depth, framebuffer.depth.at(x, y)))
 									continue;
 
@@ -296,7 +303,38 @@ namespace rasterizer
 							}
 
 							if (framebuffer.color)
-								framebuffer.color.at(x, y) = to_color4ub(l0 * v0.color + l1 * v1.color + l2 * v2.color);
+							{
+								auto color = l0 * v0.color + l1 * v1.color + l2 * v2.color;
+
+								if (command.lights)
+								{
+									vector3f lighting = command.lights->ambient_light;
+
+									auto normal = normalized(l0 * v0.normal + l1 * v1.normal + l2 * v2.normal);
+									auto position = l0 * v0.world_position + l1 * v1.world_position + l2 * v2.world_position;
+
+									for (auto const & light : command.lights->directional_lights)
+									{
+										lighting = lighting + std::max(0.f, dot(light.direction, normal)) * light.intensity;
+									}
+
+									for (auto const & light : command.lights->point_lights)
+									{
+										vector3f delta = light.position - position;
+										float distance = length(delta);
+										vector3f direction = delta / distance;
+										float attenuation = 1.f / (light.attenuation.x + light.attenuation.y * distance + light.attenuation.z * distance * distance);
+
+										lighting = lighting + std::max(0.f, dot(direction, normal)) * attenuation * light.intensity;
+									}
+
+									auto result = lighting * to_vector3f(color);
+
+									color = {result.x, result.y, result.z, color.w};
+								}
+
+								framebuffer.color.at(x, y) = to_color4ub(color);
+							}
 						}
 					}
 				}

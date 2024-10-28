@@ -42,6 +42,45 @@ namespace rasterizer
 		{ 1.f,  1.f,  1.f},
 	};
 
+	static vector3f cube_normals[] =
+	{
+		// -X face
+		{-1.f,  0.f,  0.f},
+		{-1.f,  0.f,  0.f},
+		{-1.f,  0.f,  0.f},
+		{-1.f,  0.f,  0.f},
+
+		// +X face
+		{ 1.f,  0.f,  0.f},
+		{ 1.f,  0.f,  0.f},
+		{ 1.f,  0.f,  0.f},
+		{ 1.f,  0.f,  0.f},
+
+		// -Y face
+		{ 0.f, -1.f,  0.f},
+		{ 0.f, -1.f,  0.f},
+		{ 0.f, -1.f,  0.f},
+		{ 0.f, -1.f,  0.f},
+
+		// +Y face
+		{ 0.f,  1.f,  0.f},
+		{ 0.f,  1.f,  0.f},
+		{ 0.f,  1.f,  0.f},
+		{ 0.f,  1.f,  0.f},
+
+		// -Z face
+		{ 0.f,  0.f, -1.f},
+		{ 0.f,  0.f, -1.f},
+		{ 0.f,  0.f, -1.f},
+		{ 0.f,  0.f, -1.f},
+
+		// +Z face
+		{ 0.f,  0.f,  1.f},
+		{ 0.f,  0.f,  1.f},
+		{ 0.f,  0.f,  1.f},
+		{ 0.f,  0.f,  1.f},
+	};
+
 	static vector4f cube_colors[] =
 	{
 		// -X face
@@ -111,6 +150,7 @@ namespace rasterizer
 	const mesh cube
 	{
 		.positions = {cube_positions},
+		.normals = {cube_normals},
 		.colors = {cube_colors},
 		.indices = cube_indices,
 		.count = 36,
