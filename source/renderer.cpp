@@ -15,6 +15,7 @@ namespace rasterizer
 			vector3f world_position;
 			vector3f normal;
 			vector4f color;
+			vector2f texcoord;
 		};
 
 		vertex clip_intersect_edge(vertex const & v0, vertex const & v1, float value0, float value1)
@@ -32,6 +33,7 @@ namespace rasterizer
 			v.world_position = (1.f - t) * v0.world_position + t * v1.world_position;
 			v.normal = (1.f - t) * v0.normal + t * v1.normal;
 			v.color = (1.f - t) * v0.color + t * v1.color;
+			v.texcoord = (1.f - t) * v0.texcoord + t * v1.texcoord;
 
 			return v;
 		}
@@ -214,6 +216,7 @@ namespace rasterizer
 				clipped_vertices[i].position = view_projection * as_point(clipped_vertices[i].world_position);
 				clipped_vertices[i].normal = to_vector3f(command.model * as_vector(command.mesh.normals[indices[i]]));
 				clipped_vertices[i].color = command.mesh.colors[indices[i]];
+				clipped_vertices[i].texcoord = command.mesh.texcoords[indices[i]];
 			}
 
 			auto clipped_vertices_end = clip_triangle(clipped_vertices, clipped_vertices + 3);
@@ -267,51 +270,146 @@ namespace rasterizer
 				ymin = std::max<float>(ymin, std::min({std::floor(v0.position.y), std::floor(v1.position.y), std::floor(v2.position.y)}));
 				ymax = std::min<float>(ymax, std::max({std::floor(v0.position.y), std::floor(v1.position.y), std::floor(v2.position.y)}));
 
-				for (std::int32_t y = ymin; y <= ymax; ++y)
+				for (std::int32_t y = ymin; y <= ymax; y += 2)
 				{
-					for (std::int32_t x = xmin; x <= xmax; ++x)
+					for (std::int32_t x = xmin; x <= xmax; x += 2)
 					{
-						vector4f p{x + 0.5f, y + 0.5f, 0.f, 0.f};
+						float det01p[2][2];
+						float det12p[2][2];
+						float det20p[2][2];
 
-						float det01p = det2D(v1.position - v0.position, p - v0.position);
-						float det12p = det2D(v2.position - v1.position, p - v1.position);
-						float det20p = det2D(v0.position - v2.position, p - v2.position);
+						float l0[2][2];
+						float l1[2][2];
+						float l2[2][2];
 
-						if (det01p >= 0.f && det12p >= 0.f && det20p >= 0.f)
+						vector2f texcoord[2][2];
+
+						for (int dy = 0; dy < 2; ++dy)
 						{
-							float l0 = det12p / det012 * v0.position.w;
-							float l1 = det20p / det012 * v1.position.w;
-							float l2 = det01p / det012 * v2.position.w;
-
-							float lsum = l0 + l1 + l2;
-
-							l0 /= lsum;
-							l1 /= lsum;
-							l2 /= lsum;
-
-							auto ndc_position = l0 * v0.position + l1 * v1.position + l2 * v2.position;
-
-							std::uint32_t depth = (0.5f + 0.5f * ndc_position.z) * std::uint32_t(-1);
-
-							if (framebuffer.depth)
+							for (int dx = 0; dx < 2; ++dx)
 							{
-								if (!depth_test_passed(command.depth.mode, depth, framebuffer.depth.at(x, y)))
+								vector4f p{x + dx + 0.5f, y + dy + 0.5f, 0.f, 0.f};
+
+								det01p[dy][dx] = det2D(v1.position - v0.position, p - v0.position);
+								det12p[dy][dx] = det2D(v2.position - v1.position, p - v1.position);
+								det20p[dy][dx] = det2D(v0.position - v2.position, p - v2.position);
+
+								l0[dy][dx] = det12p[dy][dx] / det012 * v0.position.w;
+								l1[dy][dx] = det20p[dy][dx] / det012 * v1.position.w;
+								l2[dy][dx] = det01p[dy][dx] / det012 * v2.position.w;
+
+								float lsum = l0[dy][dx] + l1[dy][dx] + l2[dy][dx];
+
+								l0[dy][dx] /= lsum;
+								l1[dy][dx] /= lsum;
+								l2[dy][dx] /= lsum;
+
+								texcoord[dy][dx] = l0[dy][dx] * v0.texcoord + l1[dy][dx] * v1.texcoord + l2[dy][dx] * v2.texcoord;
+							}
+						}
+
+						for (int dy = 0; dy < 2; ++dy)
+						{
+							for (int dx = 0; dx < 2; ++dx)
+							{
+								if (x + dx > xmax)
 									continue;
 
-								if (command.depth.write)
-									framebuffer.depth.at(x, y) = depth;
-							}
+								if (y + dy > ymax)
+									continue;
 
-							if (framebuffer.color)
-							{
-								auto color = l0 * v0.color + l1 * v1.color + l2 * v2.color;
+								if (det01p[dy][dx] < 0.f || det12p[dy][dx] < 0.f || det20p[dy][dx] < 0.f)
+									continue;
+
+								auto ndc_position = l0[dy][dx] * v0.position + l1[dy][dx] * v1.position + l2[dy][dx] * v2.position;
+
+								std::uint32_t depth = (0.5f + 0.5f * ndc_position.z) * std::uint32_t(-1);
+
+								if (framebuffer.depth)
+								{
+									if (!depth_test_passed(command.depth.mode, depth, framebuffer.depth.at(x + dx, y + dy)))
+										continue;
+
+									if (command.depth.write)
+										framebuffer.depth.at(x + dx, y + dy) = depth;
+								}
+
+								if (!framebuffer.color)
+									continue;
+
+								auto color = l0[dy][dx] * v0.color + l1[dy][dx] * v1.color + l2[dy][dx] * v2.color;
+
+								if (command.albedo)
+								{
+									auto texture = command.albedo->texture;
+
+									vector2f texture_scale { texture->width(), texture->height() };
+
+									vector2f tc = texture_scale * texcoord[dy][dx];
+									vector2f tc_dx = texture_scale * (texcoord[dy][1] - texcoord[dy][0]);
+									vector2f tc_dy = texture_scale * (texcoord[1][dx] - texcoord[0][dx]);
+
+									float texel_area = 1.f / std::abs(det2D(tc_dx, tc_dy));
+									bool magnification = texel_area >= 1.f;
+
+									image<color4ub> const * mipmap;
+									filtering filter;
+
+									if (magnification)
+									{
+										mipmap = &texture->mipmaps[0];
+										filter = command.albedo->sampler.mag_filter;
+									}
+									else
+									{
+										int mipmap_level = std::ceil(-std::log2(std::min(1.f, texel_area)) / 2.f);
+
+										mipmap = &texture->mipmaps[std::min<int>(mipmap_level, texture->mipmaps.size() - 1)];
+										filter = command.albedo->sampler.min_filter;
+									}
+
+									tc.x = mipmap->width * std::fmod(texcoord[dy][dx].x, 1.f);
+									tc.y = mipmap->height * std::fmod(texcoord[dy][dx].y, 1.f);
+
+									if (filter == filtering::nearest || mipmap->width == 1 || mipmap->height == 1)
+									{
+										int ix = std::floor(tc.x);
+										int iy = std::floor(tc.y);
+
+										color = to_vector4f(mipmap->at(ix, iy));
+									}
+									else
+									{
+										tc.x -= 0.5f;
+										tc.y -= 0.5f;
+
+										tc.x = std::max(0.f, std::min(mipmap->width - 1.f, tc.x));
+										tc.y = std::max(0.f, std::min(mipmap->height - 1.f, tc.y));
+
+										int ix = std::min<int>(mipmap->width - 2, std::floor(tc.x));
+										int iy = std::min<int>(mipmap->height - 2, std::floor(tc.y));
+
+										tc.x -= ix;
+										tc.y -= iy;
+
+										vector4f samples[4]
+										{
+											to_vector4f(mipmap->at(ix + 0, iy + 0)),
+											to_vector4f(mipmap->at(ix + 1, iy + 0)),
+											to_vector4f(mipmap->at(ix + 0, iy + 1)),
+											to_vector4f(mipmap->at(ix + 1, iy + 1)),
+										};
+
+										color = (1.f - tc.y) * ((1.f - tc.x) * samples[0] + tc.x * samples[1]) + tc.y * ((1.f - tc.x) * samples[2] + tc.x * samples[3]);
+									}
+								}
 
 								if (command.lights)
 								{
 									vector3f lighting = command.lights->ambient_light;
 
-									auto normal = normalized(l0 * v0.normal + l1 * v1.normal + l2 * v2.normal);
-									auto position = l0 * v0.world_position + l1 * v1.world_position + l2 * v2.world_position;
+									auto normal = normalized(l0[dy][dx] * v0.normal + l1[dy][dx] * v1.normal + l2[dy][dx] * v2.normal);
+									auto position = l0[dy][dx] * v0.world_position + l1[dy][dx] * v1.world_position + l2[dy][dx] * v2.world_position;
 
 									for (auto const & light : command.lights->directional_lights)
 									{
@@ -333,7 +431,7 @@ namespace rasterizer
 									color = {result.x, result.y, result.z, color.w};
 								}
 
-								framebuffer.color.at(x, y) = to_color4ub(color);
+								framebuffer.color.at(x + dx, y + dy) = to_color4ub(color);
 							}
 						}
 					}

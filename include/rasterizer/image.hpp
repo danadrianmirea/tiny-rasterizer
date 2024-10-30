@@ -1,9 +1,11 @@
 #pragma once
 
 #include <rasterizer/image_view.hpp>
+#include <rasterizer/color.hpp>
 
 #include <cstdint>
 #include <memory>
+#include <filesystem>
 
 namespace rasterizer
 {
@@ -30,6 +32,11 @@ namespace rasterizer
 			};
 		}
 
+		Pixel & at(std::uint32_t x, std::uint32_t y) const
+		{
+			return pixels[x + y * width];
+		}
+
 		static image allocate(std::uint32_t width, std::uint32_t height)
 		{
 			return image
@@ -40,5 +47,7 @@ namespace rasterizer
 			};
 		}
 	};
+
+	image<color4ub> load_image(std::filesystem::path const & path);
 
 }

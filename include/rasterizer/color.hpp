@@ -39,4 +39,9 @@ namespace rasterizer
 		return result;
 	}
 
+	inline vector4f to_vector4f(color4ub const & c)
+	{
+		return vector4f{c.r, c.g, c.b, c.a} / 255.f;
+	}
+
 }

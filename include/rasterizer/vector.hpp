@@ -5,6 +5,36 @@
 namespace rasterizer
 {
 
+	struct vector2f
+	{
+		float x, y;
+	};
+
+	inline vector2f operator * (float s, vector2f const & v)
+	{
+		return {s * v.x, s * v.y};
+	}
+
+	inline vector2f operator - (vector2f const & v1, vector2f const & v2)
+	{
+		return {v1.x - v2.x, v1.y - v2.y};
+	}
+
+	inline vector2f operator + (vector2f const & v1, vector2f const & v2)
+	{
+		return {v1.x + v2.x, v1.y + v2.y};
+	}
+
+	inline vector2f operator * (vector2f const & v1, vector2f const & v2)
+	{
+		return {v1.x * v2.x, v1.y * v2.y};
+	}
+
+	inline float det2D(vector2f const & v0, vector2f const & v1)
+	{
+		return v0.x * v1.y - v0.y * v1.x;
+	}
+
 	struct vector3f
 	{
 		float x, y, z;
@@ -63,6 +93,11 @@ namespace rasterizer
 	inline vector4f operator * (float s, vector4f const & v)
 	{
 		return {s * v.x, s * v.y, s * v.z, s * v.w};
+	}
+
+	inline vector4f operator / (vector4f const & v, float s)
+	{
+		return {v.x / s, v.y / s, v.z / s, v.w / s};
 	}
 
 	inline vector4f operator - (vector4f const & v0, vector4f const & v1)

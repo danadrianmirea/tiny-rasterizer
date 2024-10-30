@@ -120,6 +120,45 @@ namespace rasterizer
 		{0.f, 0.f, 1.f, 1.f},
 	};
 
+	static vector2f cube_texcoords[] =
+	{
+		// -X face
+		{0.f, 0.f},
+		{1.f, 0.f},
+		{0.f, 1.f},
+		{1.f, 1.f},
+
+		// +X face
+		{0.f, 0.f},
+		{1.f, 0.f},
+		{0.f, 1.f},
+		{1.f, 1.f},
+
+		// -Y face
+		{0.f, 0.f},
+		{1.f, 0.f},
+		{0.f, 1.f},
+		{1.f, 1.f},
+
+		// +Y face
+		{0.f, 0.f},
+		{1.f, 0.f},
+		{0.f, 1.f},
+		{1.f, 1.f},
+
+		// -Z face
+		{0.f, 0.f},
+		{1.f, 0.f},
+		{0.f, 1.f},
+		{1.f, 1.f},
+
+		// +Z face
+		{0.f, 0.f},
+		{1.f, 0.f},
+		{0.f, 1.f},
+		{1.f, 1.f},
+	};
+
 	static std::uint32_t cube_indices[] =
 	{
 		// -X face
@@ -152,6 +191,7 @@ namespace rasterizer
 		.positions = {cube_positions},
 		.normals = {cube_normals},
 		.colors = {cube_colors},
+		.texcoords = {cube_texcoords},
 		.indices = cube_indices,
 		.count = 36,
 	};

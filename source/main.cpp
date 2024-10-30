@@ -2,80 +2,14 @@
 #include <chrono>
 #include <iostream>
 #include <vector>
+#include <unordered_set>
 
 #include <rasterizer/renderer.hpp>
 #include <rasterizer/cube.hpp>
 #include <rasterizer/image.hpp>
+#include <rasterizer/texture.hpp>
 
 using namespace rasterizer;
-
-struct terrain_vertex
-{
-	vector3f position;
-	vector3f normal;
-	vector4f color;
-};
-
-float terrain_height_at(float x, float z)
-{
-	return 5.f * (std::sin(0.1f * x) * std::cos(0.25f * z) + std::sin(0.04f * x) * std::cos(0.07f * z));
-}
-
-std::pair<std::vector<terrain_vertex>, std::vector<std::uint32_t>> generate_terrain(int size)
-{
-	std::vector<terrain_vertex> vertices;
-	std::vector<std::uint32_t> indices;
-
-	for (int z = 0; z <= size; ++z)
-	{
-		for (int x = 0; x <= size; ++x)
-		{
-			vector3f position{x - size * 0.5f, 0.f, z - size * 0.5f};
-
-			position.y = terrain_height_at(position.x, position.z);
-
-			vertices.push_back(terrain_vertex {
-				.position = position,
-				.normal = {0.f, 0.f, 0.f},
-				.color = {0.5f, 0.5f, 0.5f, 1.f},
-			});
-		}
-	}
-
-	auto index = [size](int x, int z){ return z * (size + 1) + x; };
-
-	for (int z = 0; z < size; ++z)
-	{
-		for (int x = 0; x < size; ++x)
-		{
-			indices.push_back(index(x, z));
-			indices.push_back(index(x, z + 1));
-			indices.push_back(index(x + 1, z));
-
-			indices.push_back(index(x + 1, z));
-			indices.push_back(index(x, z + 1));
-			indices.push_back(index(x + 1, z + 1));
-		}
-	}
-
-	for (int i = 0; i < indices.size(); i += 3)
-	{
-		auto & v0 = vertices[indices[i + 0]];
-		auto & v1 = vertices[indices[i + 1]];
-		auto & v2 = vertices[indices[i + 2]];
-
-		auto n = cross(v1.position - v0.position, v2.position - v0.position);
-
-		v0.normal = v0.normal + n;
-		v1.normal = v1.normal + n;
-		v2.normal = v2.normal + n;
-	}
-
-	for (auto & v : vertices)
-		v.normal = normalized(v.normal);
-
-	return {std::move(vertices), std::move(indices)};
-}
 
 int main()
 {
@@ -84,30 +18,27 @@ int main()
 	int width = 800;
 	int height = 600;
 
-	SDL_Window * window = SDL_CreateWindow("Tiny rasterizer", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN);
+	SDL_Window * window = SDL_CreateWindow("Tiny rasterizer", 0*SDL_WINDOWPOS_UNDEFINED, 0*SDL_WINDOWPOS_UNDEFINED, width, height, 0*SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN);
 
 	SDL_Surface * draw_surface = nullptr;
 
 	int mouse_x = 0;
 	int mouse_y = 0;
 
+	std::filesystem::path project_root = PROJECT_ROOT;
+
 	using namespace rasterizer;
 
 	image<std::uint32_t> depth_buffer;
 
-	float lights_angle = 0.f;
-	float view_angle = 0.f;
+	texture<color4ub> brick_texture;
+	brick_texture.mipmaps.push_back(load_image(project_root / "assets" / "brick_1024.jpg"));
+	generate_mipmaps(brick_texture);
 
-	auto [ terrain_vertices, terrain_indices ] = generate_terrain(64);
+	float cube_angle = 0.f;
+	float cube_distance = 5.f;
 
-	mesh terrain_mesh
-	{
-		.positions = {terrain_vertices.data(), sizeof(terrain_vertex)},
-		.normals = {(char const *)(terrain_vertices.data()) + 12, sizeof(terrain_vertex)},
-		.colors = {(char const *)(terrain_vertices.data()) + 24, sizeof(terrain_vertex)},
-		.indices = terrain_indices.data(),
-		.count = terrain_indices.size(),
-	};
+	std::unordered_set<SDL_Keycode> keydown;
 
 	using clock = std::chrono::high_resolution_clock;
 
@@ -138,6 +69,12 @@ int main()
 			mouse_x = event.motion.x;
 			mouse_y = event.motion.y;
 			break;
+		case SDL_KEYDOWN:
+			keydown.insert(event.key.keysym.sym);
+			break;
+		case SDL_KEYUP:
+			keydown.erase(event.key.keysym.sym);
+			break;
 		}
 
 		if (!running)
@@ -158,10 +95,15 @@ int main()
 
 		std::cout << dt << std::endl;
 
-		lights_angle += dt;
-		view_angle += 0.1f * dt;
+		if (keydown.contains(SDLK_LEFT))
+			cube_angle -= 2.f * dt;
+		if (keydown.contains(SDLK_RIGHT))
+			cube_angle += 2.f * dt;
 
-		using namespace rasterizer;
+		if (keydown.contains(SDLK_UP))
+			cube_distance += 4.f * dt;
+		if (keydown.contains(SDLK_DOWN))
+			cube_distance -= 4.f * dt;
 
 		framebuffer framebuffer
 		{
@@ -184,77 +126,51 @@ int main()
 		clear(framebuffer.color, {0.9f, 0.9f, 0.9f, 1.f});
 		clear(framebuffer.depth, -1);
 
-		matrix4x4f model = matrix4x4f::identity();
+		matrix4x4f model = matrix4x4f::rotateZX(cube_angle);
 
-		matrix4x4f view = matrix4x4f::translate({0.f, 0.f, -50.f}) * matrix4x4f::rotateYZ(M_PIf / 4.f) * matrix4x4f::rotateZX(view_angle);
+		matrix4x4f view = matrix4x4f::translate({0.f, 0.f, -cube_distance}) * matrix4x4f::rotateYZ(M_PIf / 12.f);
 
 		matrix4x4f projection = matrix4x4f::perspective(0.1f, 100.f, M_PIf / 3.f, width * 1.f / height);
 
 		directional_light sun
 		{
-			normalized(vector3f{2.f, 3.f, -1.f}),
+			normalized(vector3f{1.f, 1.f, 1.f}),
 			{1.f, 1.f, 1.f},
 		};
 
-		point_light point_lights[3]
-		{
-			{
-				.position = {20.f * std::cos(lights_angle + 0.f * M_PIf / 3.f), 0.f, 20.f * std::sin(lights_angle + 0.f * M_PIf / 3.f)},
-				.intensity = {1.f, 1.f, 0.f},
-				.attenuation = {1.f, 0.f, 0.01f},
-			},
-			{
-				.position = {20.f * std::cos(lights_angle + 2.f * M_PIf / 3.f), 0.f, 20.f * std::sin(lights_angle + 2.f * M_PIf / 3.f)},
-				.intensity = {0.f, 1.f, 1.f},
-				.attenuation = {1.f, 0.f, 0.01f},
-			},
-			{
-				.position = {20.f * std::cos(lights_angle + 4.f * M_PIf / 3.f), 0.f, 20.f * std::sin(lights_angle + 4.f * M_PIf / 3.f)},
-				.intensity = {1.f, 0.f, 1.f},
-				.attenuation = {1.f, 0.f, 0.01f},
-			},
-		};
-
-		for (auto & light : point_lights)
-			light.position.y = 1.f + terrain_height_at(light.position.x, light.position.z);
+		vector4f color{1.f, 1.f, 1.f, 1.f};
 
 		draw(framebuffer, viewport,
 			draw_command {
-				.mesh = terrain_mesh,
-				.cull_mode = cull_mode::none,
+				.mesh = {
+					.positions = cube.positions,
+					.normals = cube.normals,
+					.colors = {&color, 0},
+					.texcoords = cube.texcoords,
+					.indices = cube.indices,
+					.count = cube.count,
+				},
+				.cull_mode = cull_mode::cw,
 				.depth = {
+					.write = true,
 					.mode = depth_test_mode::less,
 				},
 				.model = model,
 				.view = view,
 				.projection = projection,
-
 				.lights = light_settings {
 					.ambient_light = {0.2f, 0.2f, 0.2f},
 					.directional_lights = {&sun, 1},
-					.point_lights = point_lights,
 				},
+				.albedo = texture_and_sampler {
+					.texture = &brick_texture,
+					.sampler = {
+						.mag_filter = filtering::linear,
+						.min_filter = filtering::linear,
+					},
+				}
 			}
 		);
-
-		for (auto const & light : point_lights)
-		{
-			vector4f color = {light.intensity.x, light.intensity.y, light.intensity.z, 1.f};
-			draw(framebuffer, viewport,
-				draw_command {
-					.mesh = {
-						.positions = cube.positions,
-						.normals = cube.normals,
-						.colors = {&color, 0},
-						.indices = cube.indices,
-						.count = cube.count,
-					},
-					.model = matrix4x4f::translate(light.position) * matrix4x4f::scale(0.5f),
-					.view = view,
-					.projection = projection,
-				}
-			);
-		}
 
 		SDL_Rect rect{.x = 0, .y = 0, .w = width, .h = height};
 		SDL_BlitSurface(draw_surface, &rect, SDL_GetWindowSurface(window), &rect);
